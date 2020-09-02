@@ -1,4 +1,9 @@
-# gradientflow
+# Gradient Flow
+
+Implementation of gradient flow in pytorch.
+```
+dw/dt = -dL/dw
+```
 
 ## Install
 ```
@@ -34,3 +39,6 @@ f1 = internals['f']  # trained model
 plt.plot([x['t'] for x in dynamics], [x['loss'] for x in dynamics])
 plt.yscale('log')
 ```
+
+![image](https://user-images.githubusercontent.com/333780/91983505-141cd800-ed2c-11ea-8a3c-80f436ffada3.png)
+
