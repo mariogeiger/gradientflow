@@ -56,7 +56,7 @@ def gradientflow_ode(var0, grad_fn, max_dgrad):
 
             # 3 - Check if the step is small enough
             new_grad = grad_fn(var)
-            if isinstance(grad, tuple):
+            if isinstance(new_grad, tuple):
                 new_grad, custom_internals = new_grad
 
             if torch.isnan(new_grad).any():
