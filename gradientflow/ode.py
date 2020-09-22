@@ -22,6 +22,10 @@ def gradientflow_ode(var0, grad_fn, max_dgrad):
     grad = grad_fn(var)
     dgrad = 0
 
+    custom_internals = None
+    if isinstance(grad, tuple):
+        grad, custom_internals = grad
+
     for step in itertools.count():
 
         state = {
@@ -33,6 +37,7 @@ def gradientflow_ode(var0, grad_fn, max_dgrad):
         internals = {
             'variables': var,
             'gradient': grad,
+            'custom': custom_internals,
         }
 
         yield state, internals
@@ -51,6 +56,8 @@ def gradientflow_ode(var0, grad_fn, max_dgrad):
 
             # 3 - Check if the step is small enough
             new_grad = grad_fn(var)
+            if isinstance(grad, tuple):
+                new_grad, custom_internals = new_grad
 
             if torch.isnan(new_grad).any():
                 break
