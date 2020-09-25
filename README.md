@@ -28,7 +28,28 @@ for state, internals in gradientflow_backprop(f, x, y, loss):
 
 plt.plot([x['t'] for x in dynamics], [x['loss'] for x in dynamics])
 ```
-(subset of [example.py](example.py))
+(subset of [example_backprop.py](example_backprop.py))
 
 ![image](https://user-images.githubusercontent.com/333780/91983505-141cd800-ed2c-11ea-8a3c-80f436ffada3.png)
 
+
+```python
+theta0 = 3.14 / 2
+dot_theta0 = 0.0
+
+def grad(x):
+    theta, dot_theta = x
+    return torch.tensor([dot_theta, -theta.sin()])
+
+dynamics = []
+
+for state, internals in gradientflow_ode(torch.tensor([theta0, dot_theta0]), grad):
+    state['theta'] = internals['variables'][0].item()
+    dynamics.append(state)
+
+    if state['t'] > 100:
+        break
+
+plt.plot([x['t'] for x in dynamics], [x['theta'] for x in dynamics])
+```
+(subset of [example_ode.py](example_ode.py))

@@ -8,7 +8,7 @@ import itertools
 import torch
 
 
-def gradientflow_ode(var0, grad_fn, max_dgrad):
+def gradientflow_ode(var0, grad_fn, max_dgrad=1e-4):
     """
     gradientflow for an ODE
     """
@@ -19,7 +19,11 @@ def gradientflow_ode(var0, grad_fn, max_dgrad):
 
     t = 0
 
-    grad = grad_fn(var)
+    try:
+        grad = grad_fn(var)
+    except TypeError:
+        grad = grad_fn(var, t)
+
     dgrad = 0
 
     custom_internals = None
@@ -55,7 +59,11 @@ def gradientflow_ode(var0, grad_fn, max_dgrad):
             current_dt = dt
 
             # 3 - Check if the step is small enough
-            new_grad = grad_fn(var)
+            try:
+                new_grad = grad_fn(var)
+            except TypeError:
+                new_grad = grad_fn(var, t)
+
             if isinstance(new_grad, tuple):
                 new_grad, custom_internals = new_grad
 

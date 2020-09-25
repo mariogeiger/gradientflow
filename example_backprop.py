@@ -33,3 +33,4 @@ for state, internals in gradientflow_backprop(f, x, y, loss):
 
 plt.plot([x['t'] for x in dynamics], [x['loss'] for x in dynamics])
 plt.yscale('log')
+plt.show()
