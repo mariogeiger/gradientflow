@@ -153,7 +153,6 @@ def gradientflow_backprop(f0, x, y, loss, subf0=False, tau=0, chunk=None, batch=
             'dt': current_dt,
             'dgrad': dgrad,
             'dout': dout,
-            'changed_dt': step_change_dt == step - 1
         }
         internals = {
             'f': f,
@@ -161,6 +160,7 @@ def gradientflow_backprop(f0, x, y, loss, subf0=False, tau=0, chunk=None, batch=
             'output0': out0[bi],
             'gradient': grad,
             'batch_indices': bi,
+            'changed_dt': step_change_dt == step - 1
         }
 
         yield state, internals
