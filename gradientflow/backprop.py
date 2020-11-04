@@ -100,7 +100,9 @@ def output_gradient(f, loss, x, y, out0, chunk):
     loss_value = 0
     for i in [slice(i, i + chunk) for i in range(0, len(x), chunk)]:
         o = f(x[i]) - out0[i]
-        l = loss(o, y[i]).sum() / len(x)
+        l = loss(o, y[i])
+        assert l.shape == (len(o),)
+        l = l.sum() / len(x)
         grad += gradient(l, f.parameters())
         out.append(o)
         loss_value += l.item()
@@ -110,6 +112,10 @@ def output_gradient(f, loss, x, y, out0, chunk):
 def gradientflow_backprop(f0, x, y, loss, subf0=False, tau=0, chunk=None, batch=None, max_dgrad=1e-3, max_dout=math.inf):
     """
     gradientflow on a torch.nn.Model using backprop
+    :param f0: torch.nn.Model
+    :param x: torch.Tensor [z, ...]
+    :param y: torch.Tensor [z, ...]
+    :param loss: function: outputs, labels -> losses
     """
 
     if chunk is None:
