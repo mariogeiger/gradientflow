@@ -3,15 +3,15 @@
 Gradient flow for any model using pytorch backprop
 """
 import copy
-import itertools
 import math
 
 import torch
 
+from .flow import flow
 from .gradient import gradient
 
 
-class ContinuousMomentum(torch.optim.Optimizer):
+class _ContinuousMomentum(torch.optim.Optimizer):
     r"""Implements a continuous version of momentum.
 
     d/dt velocity = -1/tau (velocity + grad)
@@ -72,7 +72,7 @@ class ContinuousMomentum(torch.optim.Optimizer):
         return loss
 
 
-def make_step(f, optimizer, dt, grad):
+def _make_step(f, optimizer, dt, grad):
     """
     internal function
     """
@@ -91,7 +91,7 @@ def make_step(f, optimizer, dt, grad):
         p.grad = None
 
 
-def output_gradient(f, loss, x, y, out0, chunk):
+def _output_gradient(f, loss, x, y, out0, chunk):
     """
     internal function
     """
@@ -109,7 +109,7 @@ def output_gradient(f, loss, x, y, out0, chunk):
     return torch.cat(out), grad, loss_value
 
 
-def gradientflow_backprop(f0, x, y, loss, subf0=False, tau=0, chunk=None, batch=None, max_dgrad=1e-3, max_dout=math.inf):
+def gradientflow_backprop(f0, x, y, loss, subf0=False, tau=0, chunk=None, batch=None, max_dgrad=1e-3, max_dout=1):
     """
     gradientflow on a torch.nn.Model using backprop
     :param f0: torch.nn.Model
@@ -139,26 +139,65 @@ def gradientflow_backprop(f0, x, y, loss, subf0=False, tau=0, chunk=None, batch=
             assert out0.shape == subf0.shape
             out0 = subf0
 
-    dt = 1
-    current_dt = 0
-    step_change_dt = 0
-    optimizer = ContinuousMomentum(f.parameters(), dt=dt, tau=tau)
+    def prepare(sta, t, old_data, old_t):
+        sta = copy.deepcopy(sta)
+        ff = copy.deepcopy(f)
+        ff.load_state_dict(sta[0])
 
-    t = 0
+        if old_data is not None:
+            if old_t == t:
+                if batch == len(x):
+                    return old_data
+                bi = torch.randperm(len(x))[:batch].sort().values
+            else:
+                bi = old_data[3]
+        else:
+            bi = torch.randperm(len(x))[:batch].sort().values
 
-    bi = torch.randperm(len(x))[:batch].sort().values
-    out, grad, loss_value = output_gradient(f, loss, x[bi], y[bi], out0[bi], chunk)
-    dgrad, dout = 0, 0
+        out, grad, loss_value = _output_gradient(ff, loss, x[bi], y[bi], out0[bi], chunk)
 
-    for step in itertools.count():
+        return out, grad, loss_value, bi
+
+    def make_step(sta, data, _t, dt):
+        sta = copy.deepcopy(sta)
+        ff = copy.deepcopy(f)
+        optimizer = _ContinuousMomentum(ff.parameters(), dt=0, tau=tau)
+
+        ff.load_state_dict(sta[0])
+        optimizer.load_state_dict(sta[1])
+        _out, grad, _loss_value, _bi = data
+
+        _make_step(ff, optimizer, dt, grad)
+        return ff.state_dict(), optimizer.state_dict()
+
+    def compare(data, new_data):
+        out, grad, _loss_value, bi = data
+        new_out, new_grad, _new_loss_value, new_bi = new_data
+
+        assert bi.eq(new_bi).all()
+
+        dout = (out - new_out).abs().max().item()
+        if grad.norm() == 0 or new_grad.norm() == 0:
+            dgrad = 0
+        else:
+            dgrad = (grad - new_grad).norm().pow(2).div(grad.norm() * new_grad.norm()).item()
+
+        return dgrad / max_dgrad, dout / max_dout
+
+
+    opt = _ContinuousMomentum(f.parameters(), dt=0, tau=tau)
+
+    for state, internals in flow((f.state_dict(), opt.state_dict()), prepare, make_step, compare):
+        out, grad, loss_value, bi = internals['data']
+        f.load_state_dict(internals['x'][0])
 
         state = {
-            'step': step,
-            't': t,
+            'step': state['step'],
+            't': state['t'],
             'loss': loss_value,
-            'dt': current_dt,
-            'dgrad': dgrad,
-            'dout': dout,
+            'dt': state['dt'],
+            'dgrad': max_dgrad * state['d'][0] if state['d'] is not None else 0,
+            'dout': max_dout * state['d'][1] if state['d'] is not None else 0,
         }
         internals = {
             'f': f,
@@ -166,54 +205,6 @@ def gradientflow_backprop(f0, x, y, loss, subf0=False, tau=0, chunk=None, batch=
             'output0': out0[bi],
             'gradient': grad,
             'batch_indices': bi,
-            'changed_dt': step_change_dt == step - 1
+            'changed_dt': internals['changed_dt']
         }
-
         yield state, internals
-
-        if torch.isnan(out).any():
-            break
-
-        # 1 - Save current state
-        state = copy.deepcopy((f.state_dict(), optimizer.state_dict(), t))
-
-        while True:
-            # 2 - Make a tentative step
-            make_step(f, optimizer, dt, grad)
-            t += dt
-            current_dt = dt
-
-            # 3 - Check if the step is small enough
-            new_out, new_grad, new_loss_value = output_gradient(f, loss, x[bi], y[bi], out0[bi], chunk)
-
-            if torch.isnan(new_out).any():
-                break
-
-            dout = (out - new_out).abs().max().item()
-            if grad.norm() == 0 or new_grad.norm() == 0:
-                dgrad = 0
-            else:
-                dgrad = (grad - new_grad).norm().pow(2).div(grad.norm() * new_grad.norm()).item()
-
-            if dgrad < max_dgrad and dout < max_dout:
-                if dgrad < 0.5 * max_dgrad and dout < 0.5 * max_dout:
-                    dt *= 1.1
-                break
-
-            # 4 - If not, reset and retry
-            dt /= 10
-
-            # print("[{} +{}] [dt={:.1e} dgrad={:.1e} dout={:.1e}]".format(step, step - step_change_dt, dt, dgrad, dout), flush=True)
-            step_change_dt = step
-            f.load_state_dict(state[0])
-            optimizer.load_state_dict(state[1])
-            t = state[2]
-
-        # 5 - If yes, compute the new output and gradient
-        if batch == len(x):
-            out = new_out
-            grad = new_grad
-            loss_value = new_loss_value
-        else:
-            bi = torch.randperm(len(x))[:batch].sort().values
-            out, grad, loss_value = output_gradient(f, loss, x[bi], y[bi], out0[bi], chunk)

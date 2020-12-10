@@ -43,7 +43,7 @@ def grad(x):
 
 dynamics = []
 
-for state, internals in gradientflow_ode(torch.tensor([theta0, dot_theta0]), grad):
+for state, internals in flow_ode(torch.tensor([theta0, dot_theta0]), grad):
     state['theta'] = internals['variables'][0].item()
     dynamics.append(state)
 

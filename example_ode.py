@@ -5,7 +5,7 @@ pendulum equation
 import torch
 import matplotlib.pyplot as plt
 
-from gradientflow import gradientflow_ode
+from gradientflow import flow_ode
 
 
 theta0 = 3.14 / 2
@@ -23,10 +23,12 @@ def grad(x, _t):
 
 dynamics = []
 
-for state, internals in gradientflow_ode(torch.tensor([theta0, dot_theta0]), grad):
-    state['theta'] = internals['variables'][0].item()
-    state['dot_theta'] = internals['variables'][1].item()
+for state, internals in flow_ode(torch.tensor([theta0, dot_theta0]), grad, max_dgrad=1e-5):
+    state['theta'] = internals['x'][0].item()
+    state['dot_theta'] = internals['x'][1].item()
     dynamics.append(state)
+
+    print(state)
 
     if state['t'] > 100:
         break

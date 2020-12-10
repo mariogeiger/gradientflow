@@ -27,7 +27,7 @@ dynamics = []
 for state, internals in gradientflow_backprop(f, x, y, loss):
     dynamics.append(state)
 
-    if state['loss'] < 1e-5:
+    if state['loss'] < 1e-6:
         f1 = internals['f']  # trained model
         break
 

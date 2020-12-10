@@ -1,89 +1,26 @@
 # pylint: disable=no-member, invalid-name, line-too-long
 """
-Gradient flow for an ODE
+flow for an ODE
 """
-import copy
-import itertools
-
-import torch
+from .flow import flow
 
 
-def gradientflow_ode(var0, grad_fn, max_dgrad=1e-4):
+def flow_ode(x, grad_fn, max_dgrad=1e-4):
     """
-    gradientflow for an ODE
+    flow for an ODE
     """
-    var = copy.deepcopy(var0)
 
-    dt = 1
-    current_dt = 0
+    def prepare(xx, t, old_data, old_t):
+        if old_data is not None and old_t == t:
+            return old_data
+        return grad_fn(xx, t)
 
-    t = 0
+    def make_step(xx, g, _t, dt):
+        return xx + dt * g
 
-    try:
-        grad = grad_fn(var)
-    except TypeError:
-        grad = grad_fn(var, t)
+    def compare(g1, g2):
+        dgrad = (g1 - g2).pow(2).sum() / (g1.pow(2).sum() * g2.pow(2).sum()).sqrt()
+        return dgrad.item() / max_dgrad
 
-    dgrad = 0
-
-    custom_internals = None
-    if isinstance(grad, tuple):
-        grad, custom_internals = grad
-
-    for step in itertools.count():
-
-        state = {
-            'step': step,
-            't': t,
-            'dt': current_dt,
-            'dgrad': dgrad,
-        }
-        internals = {
-            'variables': var,
-            'gradient': grad,
-            'custom': custom_internals,
-        }
-
+    for state, internals in flow(x, prepare, make_step, compare):
         yield state, internals
-
-        if torch.isnan(grad).any():
-            break
-
-        # 1 - Save current state
-        state = copy.deepcopy((var, t))
-
-        while True:
-            # 2 - Make a tentative step
-            var.add_(dt * grad)
-            t += dt
-            current_dt = dt
-
-            # 3 - Check if the step is small enough
-            try:
-                new_grad = grad_fn(var)
-            except TypeError:
-                new_grad = grad_fn(var, t)
-
-            if isinstance(new_grad, tuple):
-                new_grad, custom_internals = new_grad
-
-            if torch.isnan(new_grad).any():
-                break
-
-            if grad.norm() == 0 or new_grad.norm() == 0:
-                dgrad = 0
-            else:
-                dgrad = (grad - new_grad).norm().pow(2).div(grad.norm() * new_grad.norm()).item()
-
-            if dgrad < max_dgrad:
-                if dgrad < 0.5 * max_dgrad:
-                    dt *= 1.1
-                break
-
-            # 4 - If not, reset and retry
-            dt /= 10
-
-            var, t = copy.deepcopy(state)
-
-        # 5 - If yes, compute the new output and gradient
-        grad = new_grad
