@@ -5,3 +5,4 @@ flow
 from .backprop import *  # noqa
 from .flow import *  # noqa
 from .ode import *  # noqa
+from .sgd import *  # noqa

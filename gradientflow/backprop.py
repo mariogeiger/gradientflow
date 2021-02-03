@@ -50,6 +50,7 @@ class _ContinuousMomentum(torch.optim.Optimizer):
                 else:
                     t = param_state['t']
 
+                v = None
                 if tau != 0:
                     if 'velocity' not in param_state:
                         v = param_state['velocity'] = torch.zeros_like(p.data)
@@ -183,7 +184,6 @@ def gradientflow_backprop(f0, x, y, loss, subf0=False, tau=0, chunk=None, batch=
             dgrad = (grad - new_grad).norm().pow(2).div(grad.norm() * new_grad.norm()).item()
 
         return dgrad / max_dgrad, dout / max_dout
-
 
     opt = _ContinuousMomentum(f.parameters(), dt=0, tau=tau)
 

@@ -52,6 +52,7 @@ def flow(x, prepare, make_step, compare):
 
             # 4 - If not, reset and retry
             dt /= 10
+            step_change_dt = step
 
         # 5 - If yes, compute the new output and gradient
         x = new_x
