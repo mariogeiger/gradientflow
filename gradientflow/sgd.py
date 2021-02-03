@@ -55,8 +55,37 @@ def _clamp(min_, x, max_):
     return max(min_, min(x, max_))
 
 
-def dgrad(g1, g2):
+def _dgrad(g1, g2):
     return (g1 - g2).norm().pow(2) / (g1.norm() * g2.norm())
+
+
+_State = namedtuple('State', 'f, t, tx')
+_StepData = namedtuple('StepData', 'output, gradient, loss, batch_indices, new_x')
+
+
+def _prepare_step(state, post_last_step_data, dt, x, y, loss_function, out0, beta, chunk, batch_min, batch_max):
+    batch = round(beta * (state.t + dt - state.tx))
+    if batch < batch_min:
+        if post_last_step_data.new_x == 0:
+            # keep the same batch if the last (tentative) step was a success
+            return post_last_step_data
+
+        batch = batch_min
+
+    if batch > batch_max:
+        dt = dt * batch_max / batch
+        batch = batch_max
+
+    batch_indices = torch.randperm(len(x))[:batch]
+
+    out, grad, loss = _output_gradient(state.f, loss_function, x, y, out0, batch_indices, chunk)
+    return _StepData(
+        output=out,
+        gradient=grad,
+        loss=loss,
+        batch_indices=batch_indices,
+        new_x=batch,
+    )
 
 
 def gradientflow_backprop_sgd(f0, x, y, loss_function, subf0=False, beta=1.0, chunk=None, batch_min=1, batch_max=None, max_dgrad=1e-3, max_dout=1):
@@ -87,10 +116,7 @@ def gradientflow_backprop_sgd(f0, x, y, loss_function, subf0=False, beta=1.0, ch
     else:
         out0 = subf0
 
-    State = namedtuple('State', 'f, t, tx')
-    StepData = namedtuple('StepData', 'output, gradient, loss, batch_indices, new_x')
-
-    state = State(f=f, t=0.0, tx=0.0)
+    state = _State(f=f, t=0.0, tx=0.0)
     del f
 
     dt = batch_min / beta
@@ -101,7 +127,7 @@ def gradientflow_backprop_sgd(f0, x, y, loss_function, subf0=False, beta=1.0, ch
 
     batch_indices = torch.randperm(len(x))[:batch_min]
     out, grad, loss = _output_gradient(state.f, loss_function, x, y, out0, batch_indices, chunk)
-    data = StepData(
+    data = _StepData(
         output=out,
         gradient=grad,
         loss=loss,
@@ -141,55 +167,46 @@ def gradientflow_backprop_sgd(f0, x, y, loss_function, subf0=False, beta=1.0, ch
             new_f = _make_step(state.f, dt, data.gradient)
             new_t = state.t + dt
             new_tx = state.tx + data.new_x / beta
-            new_state = State(f=new_f, t=new_t, tx=new_tx)
+            new_state = _State(f=new_f, t=new_t, tx=new_tx)
             del new_f, new_t, new_tx
 
             # 3 - Check if the step is small enough
             out, grad, loss = _output_gradient(new_state.f, loss_function, x, y, out0, data.batch_indices, chunk)
-            new_data = StepData(
+            post_step_data = _StepData(
                 output=out,
                 gradient=grad,
                 loss=loss,
                 batch_indices=data.batch_indices,
-                new_x=0
+                new_x=data.new_x
             )
             del out, grad, loss
 
             d = (
-                (data.output - new_data.output).abs().max().item() / max_dout,
-                dgrad(data.gradient, new_data.gradient).item() / max_dgrad,
+                (data.output - post_step_data.output).abs().max().item() / max_dout,
+                _dgrad(data.gradient, post_step_data.gradient).item() / max_dgrad,
             )
             if all(c < 1 for c in d):
                 if all(c < 1/2 for c in d):
                     dt *= 1.1
+
+                # success!
+                post_step_data = _StepData(
+                    output=post_step_data.output,
+                    gradient=post_step_data.gradient,
+                    loss=post_step_data.loss,
+                    batch_indices=post_step_data.batch_indices,
+                    new_x=0  # if reused, marked as not new
+                )
                 break
 
             # 4 - If not, reset and retry
             dt /= 10
             step_change_dt = step
 
+            data = _prepare_step(state, post_step_data, dt, x, y, loss_function, out0, beta, chunk, batch_min, batch_max)
+
         # 5 - If yes, compute the new output and gradient
         state = new_state
         del new_state
 
-        batch = round(beta * (state.t + dt - state.tx))
-        if batch < batch_min:
-            # keep the same batch
-            data = new_data
-            assert data.new_x == 0
-        else:
-            if batch > batch_max:
-                dt = dt * batch_max / batch
-                batch = batch_max
-            batch_indices = torch.randperm(len(x))[:batch]
-
-            out, grad, loss = _output_gradient(state.f, loss_function, x, y, out0, batch_indices, chunk)
-            data = StepData(
-                output=out,
-                gradient=grad,
-                loss=loss,
-                batch_indices=batch_indices,
-                new_x=batch,
-            )
-            del batch_indices, out, grad, loss
-        del batch, new_data
+        data = _prepare_step(state, post_step_data, dt, x, y, loss_function, out0, beta, chunk, batch_min, batch_max)
