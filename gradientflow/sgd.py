@@ -26,19 +26,21 @@ def _make_step(f, dt, grad):
     return f
 
 
+def _getitems(x, ii):
+    if isinstance(x, list):
+        return [x[i.item()] for i in ii]
+    try:
+        return x[ii]
+    except TypeError:
+        return [x[i.item()] for i in ii]
+
+
 def _output_gradient(f, loss_function, dataset, labels, out0, batch_indices, chunk):
     """
     internal function
     """
-    try:
-        x = dataset[batch_indices]
-    except TypeError:
-        x = [dataset[i.item()] for i in batch_indices]
-
-    try:
-        y = labels[batch_indices]
-    except TypeError:
-        y = [labels[i.item()] for i in batch_indices]
+    x = _getitems(dataset, batch_indices)
+    y = _getitems(labels, batch_indices)
 
     if out0 is not None:
         out0 = out0[batch_indices]
