@@ -26,12 +26,20 @@ def _make_step(f, dt, grad):
     return f
 
 
-def _output_gradient(f, loss, x, y, out0, batch_indices, chunk):
+def _output_gradient(f, loss_function, dataset, labels, out0, batch_indices, chunk):
     """
     internal function
     """
-    x = x[batch_indices]
-    y = y[batch_indices]
+    try:
+        x = dataset[batch_indices]
+    except TypeError:
+        x = [dataset[i.item()] for i in batch_indices]
+
+    try:
+        y = labels[batch_indices]
+    except TypeError:
+        y = [labels[i.item()] for i in batch_indices]
+
     if out0 is not None:
         out0 = out0[batch_indices]
 
@@ -42,7 +50,7 @@ def _output_gradient(f, loss, x, y, out0, batch_indices, chunk):
         o = f(x[i])
         if out0 is not None:
             o = o - out0[i]
-        l = loss(o, y[i])
+        l = loss_function(o, y[i])
         assert l.shape == (len(o),)
         l = l.sum() / len(x)
         grad += gradient(l, f.parameters())
@@ -63,7 +71,7 @@ _State = namedtuple('State', 'f, t, tx')
 _StepData = namedtuple('StepData', 'output, gradient, loss, batch_indices, new_x')
 
 
-def _prepare_step(state, post_last_step_data, dt, x, y, loss_function, out0, beta, chunk, batch_min, batch_max):
+def _prepare_step(state, post_last_step_data, dt, dataset, labels, loss_function, out0, beta, chunk, batch_min, batch_max):
     batch = round(beta * (state.t + dt - state.tx))
     if batch < batch_min:
         if post_last_step_data.new_x == 0:
@@ -76,9 +84,9 @@ def _prepare_step(state, post_last_step_data, dt, x, y, loss_function, out0, bet
         dt = dt * batch_max / batch
         batch = batch_max
 
-    batch_indices = torch.randperm(len(x))[:batch]
+    batch_indices = torch.randperm(len(dataset))[:batch]
 
-    out, grad, loss = _output_gradient(state.f, loss_function, x, y, out0, batch_indices, chunk)
+    out, grad, loss = _output_gradient(state.f, loss_function, dataset, labels, out0, batch_indices, chunk)
     return _StepData(
         output=out,
         gradient=grad,
@@ -88,29 +96,29 @@ def _prepare_step(state, post_last_step_data, dt, x, y, loss_function, out0, bet
     )
 
 
-def gradientflow_backprop_sgd(f0, x, y, loss_function, subf0=False, beta=1.0, chunk=None, batch_min=1, batch_max=None, max_dgrad=1e-3, max_dout=1):
+def gradientflow_backprop_sgd(f0, dataset, labels, loss_function, subf0=False, beta=1.0, chunk=None, batch_min=1, batch_max=None, max_dgrad=1e-3, max_dout=1):
     """
     gradientflow
 
     Parameters
     ----------
     f0 : torch.Module
-    x : torch.Tensor
-    y : torch.Tensor
+    dataset : any
+    labels : torch.Tensor
     """
 
     if chunk is None:
-        chunk = len(x)
+        chunk = len(dataset)
 
     if batch_max is None:
-        batch_max = len(x)
+        batch_max = len(dataset)
 
     f = copy.deepcopy(f0)
 
     if isinstance(subf0, bool):
         if subf0:
             with torch.no_grad():
-                out0 = torch.cat([f0(x[i:i + chunk]) for i in range(0, len(x), chunk)])  # comment
+                out0 = torch.cat([f0(dataset[i:i + chunk]) for i in range(0, len(dataset), chunk)])  # comment
         else:
             out0 = None
     else:
@@ -125,8 +133,8 @@ def gradientflow_backprop_sgd(f0, x, y, loss_function, subf0=False, beta=1.0, ch
     step_change_dt = 0
     d = (0, 0)
 
-    batch_indices = torch.randperm(len(x))[:batch_max]
-    out, grad, loss = _output_gradient(state.f, loss_function, x, y, out0, batch_indices, chunk)
+    batch_indices = torch.randperm(len(dataset))[:batch_max]
+    out, grad, loss = _output_gradient(state.f, loss_function, dataset, labels, out0, batch_indices, chunk)
     data = _StepData(
         output=out,
         gradient=grad,
@@ -171,7 +179,7 @@ def gradientflow_backprop_sgd(f0, x, y, loss_function, subf0=False, beta=1.0, ch
             del new_f, new_t, new_tx
 
             # 3 - Check if the step is small enough
-            out, grad, loss = _output_gradient(new_state.f, loss_function, x, y, out0, data.batch_indices, chunk)
+            out, grad, loss = _output_gradient(new_state.f, loss_function, dataset, labels, out0, data.batch_indices, chunk)
             post_step_data = _StepData(
                 output=out,
                 gradient=grad,
@@ -203,10 +211,10 @@ def gradientflow_backprop_sgd(f0, x, y, loss_function, subf0=False, beta=1.0, ch
             dt /= 1.1**3  # = 1.33
             step_change_dt = step
 
-            data = _prepare_step(state, post_step_data, dt, x, y, loss_function, out0, beta, chunk, batch_min, batch_max)
+            data = _prepare_step(state, post_step_data, dt, dataset, labels, loss_function, out0, beta, chunk, batch_min, batch_max)
 
         # 5 - If yes, compute the new output and gradient
         state = new_state
         del new_state
 
-        data = _prepare_step(state, post_step_data, dt, x, y, loss_function, out0, beta, chunk, batch_min, batch_max)
+        data = _prepare_step(state, post_step_data, dt, dataset, labels, loss_function, out0, beta, chunk, batch_min, batch_max)
