@@ -119,20 +119,20 @@ def gradientflow_backprop_sgd(f0, x, y, loss_function, subf0=False, beta=1.0, ch
     state = _State(f=f, t=0.0, tx=0.0)
     del f
 
-    dt = batch_min / beta
+    dt = batch_max / beta
     last_dt = 0
     last_batch = 0
     step_change_dt = 0
     d = (0, 0)
 
-    batch_indices = torch.randperm(len(x))[:batch_min]
+    batch_indices = torch.randperm(len(x))[:batch_max]
     out, grad, loss = _output_gradient(state.f, loss_function, x, y, out0, batch_indices, chunk)
     data = _StepData(
         output=out,
         gradient=grad,
         loss=loss,
         batch_indices=batch_indices,
-        new_x=batch_min,
+        new_x=batch_max,
     )
     del batch_indices, out, grad, loss
 
@@ -200,7 +200,7 @@ def gradientflow_backprop_sgd(f0, x, y, loss_function, subf0=False, beta=1.0, ch
                 break
 
             # 4 - If not, reset and retry
-            dt /= 10
+            dt /= 1.1**3  # = 1.33
             step_change_dt = step
 
             data = _prepare_step(state, post_step_data, dt, x, y, loss_function, out0, beta, chunk, batch_min, batch_max)
