@@ -73,8 +73,16 @@ _State = namedtuple('State', 'f, t, tx')
 _StepData = namedtuple('StepData', 'output, gradient, loss, batch_indices, new_x')
 
 
+def _normalized_flux(beta, n, dt):
+    r"""number of data point per unit of time
+    normalized to take into acount the finite size of the dataset
+    """
+    return 1 / (1 / beta + dt / n)
+
+
 def _prepare_step(state, post_last_step_data, dt, dataset, labels, loss_function, out0, beta, chunk, batch_min, batch_max):
-    batch = round(beta * (state.t + dt - state.tx))
+    phi = _normalized_flux(beta, len(dataset), dt)
+    batch = round(phi * (state.t + dt - state.tx))
     if batch < batch_min:
         if post_last_step_data.new_x == 0:
             # keep the same batch if the last (tentative) step was a success
@@ -129,22 +137,23 @@ def gradientflow_backprop_sgd(f0, dataset, labels, loss_function, subf0=False, b
     state = _State(f=f, t=0.0, tx=0.0)
     del f
 
-    dt = batch_max / beta
+    batch = min(batch_max, len(dataset) // 2)
+    dt = batch / beta / (1 - batch / len(dataset))
     last_dt = 0
     last_batch = 0
     step_change_dt = 0
     d = (0, 0)
 
-    batch_indices = torch.randperm(len(dataset))[:batch_max]
+    batch_indices = torch.randperm(len(dataset))[:batch]
     out, grad, loss = _output_gradient(state.f, loss_function, dataset, labels, out0, batch_indices, chunk)
     data = _StepData(
         output=out,
         gradient=grad,
         loss=loss,
         batch_indices=batch_indices,
-        new_x=batch_max,
+        new_x=batch,
     )
-    del batch_indices, out, grad, loss
+    del batch_indices, out, grad, loss, batch
 
     for step in itertools.count():
 
@@ -176,7 +185,7 @@ def gradientflow_backprop_sgd(f0, dataset, labels, loss_function, subf0=False, b
             # 2 - Make a tentative step
             new_f = _make_step(state.f, dt, data.gradient)
             new_t = state.t + dt
-            new_tx = state.tx + data.new_x / beta
+            new_tx = state.tx + data.new_x / _normalized_flux(beta, len(dataset), dt)
             new_state = _State(f=new_f, t=new_t, tx=new_tx)
             del new_f, new_t, new_tx
 
