@@ -92,6 +92,15 @@ def _make_step(f, optimizer, dt, grad):
         p.grad = None
 
 
+def _getitems(x, ii):
+    if isinstance(x, list):
+        return [x[i.item()] for i in ii]
+    try:
+        return x[ii]
+    except TypeError:
+        return [x[i.item()] for i in ii]
+
+
 def _output_gradient(f, loss, x, y, out0, chunk):
     """
     internal function
@@ -155,7 +164,7 @@ def gradientflow_backprop(f0, x, y, loss, subf0=False, tau=0, chunk=None, batch=
         else:
             bi = torch.randperm(len(x))[:batch].sort().values
 
-        out, grad, loss_value = _output_gradient(ff, loss, x[bi], y[bi], out0[bi], chunk)
+        out, grad, loss_value = _output_gradient(ff, loss, _getitems(x, bi), _getitems(y, bi), out0[bi], chunk)
 
         return out, grad, loss_value, bi
 
