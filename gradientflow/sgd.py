@@ -61,10 +61,6 @@ def _output_gradient(f, loss_function, dataset, labels, out0, batch_indices, chu
     return torch.cat(out), grad, loss_value
 
 
-def _clamp(min_, x, max_):
-    return max(min_, min(x, max_))
-
-
 def _dgrad(g1, g2):
     return (g1 - g2).norm().pow(2) / (g1.norm() * g2.norm())
 
@@ -106,7 +102,21 @@ def _prepare_step(state, post_last_step_data, dt, dataset, labels, loss_function
     )
 
 
-def gradientflow_backprop_sgd(f0, dataset, labels, loss_function, subf0=False, beta=1.0, chunk=None, batch_min=1, batch_max=None, max_dgrad=1e-3, max_dout=1):
+def gradientflow_backprop_sgd(
+        f0,
+        dataset,
+        labels,
+        loss_function,
+        subf0=False,
+        beta=1.0,
+        chunk=None,
+        batch_min=1,
+        batch_max=None,
+        max_dgrad=1e-3,
+        max_dout=1,
+        dt_amplification=1.1,
+        dt_damping=1.1**3,
+            ):
     """
     gradientflow
 
@@ -206,7 +216,7 @@ def gradientflow_backprop_sgd(f0, dataset, labels, loss_function, subf0=False, b
             )
             if all(c < 1 for c in d):
                 if all(c < 1/2 for c in d):
-                    dt *= 1.1
+                    dt *= dt_amplification
 
                 # success!
                 post_step_data = _StepData(
@@ -219,7 +229,7 @@ def gradientflow_backprop_sgd(f0, dataset, labels, loss_function, subf0=False, b
                 break
 
             # 4 - If not, reset and retry
-            dt /= 1.1**3  # = 1.33
+            dt /= dt_damping
             step_change_dt = step
 
             data = _prepare_step(state, post_step_data, dt, dataset, labels, loss_function, out0, beta, chunk, batch_min, batch_max)
