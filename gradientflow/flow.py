@@ -5,7 +5,7 @@ ODE flow
 import itertools
 
 
-def flow(x, prepare, make_step, compare):
+def flow(x, prepare, make_step, compare, dt_amplification=1.1, dt_damping=10.0):
     """
     sample the dt_i to obtain a smooth  { x(t_i) }_i
     """
@@ -47,11 +47,11 @@ def flow(x, prepare, make_step, compare):
                 d = (d,)
             if all(c < 1 for c in d):
                 if all(c < 1/2 for c in d):
-                    dt *= 1.1
+                    dt *= dt_amplification
                 break
 
             # 4 - If not, reset and retry
-            dt /= 10
+            dt /= dt_damping
             step_change_dt = step
 
         # 5 - If yes, compute the new output and gradient
