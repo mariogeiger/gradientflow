@@ -11,6 +11,7 @@ pip install git+https://github.com/mariogeiger/gradientflow
 ```
 
 ## Usage
+### gradientflow_backprop
 ```python
 f = torch.nn.Linear(50, 1)
 x = torch.randn(100, 50)
@@ -32,7 +33,7 @@ plt.plot([x['t'] for x in dynamics], [x['loss'] for x in dynamics])
 
 ![image](https://user-images.githubusercontent.com/333780/91983505-141cd800-ed2c-11ea-8a3c-80f436ffada3.png)
 
-
+### flow_ode
 ```python
 theta0 = 3.14 / 2
 dot_theta0 = 0.0
