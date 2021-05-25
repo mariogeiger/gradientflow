@@ -2,7 +2,7 @@
 """
 flow for an ODE
 """
-from .flow import flow
+from ._flow import flow
 
 
 def flow_ode(x, grad_fn, max_dgrad=1e-4):

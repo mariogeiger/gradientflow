@@ -7,8 +7,8 @@ import math
 
 import torch
 
-from .flow import flow
-from .gradient import gradient
+from ._flow import flow
+from ._gradient import gradient
 
 
 class _ContinuousMomentum(torch.optim.Optimizer):

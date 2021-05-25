@@ -7,7 +7,7 @@ import itertools
 
 import torch
 
-from .gradient import gradient
+from ._gradient import gradient
 
 
 def _make_step(f, dt, grad):

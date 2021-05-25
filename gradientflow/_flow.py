@@ -5,9 +5,22 @@ ODE flow
 import itertools
 
 
-def flow(x, prepare, make_step, compare, dt_amplification=1.1, dt_damping=10.0):
-    """
-    sample the dt_i to obtain a smooth  { x(t_i) }_i
+def flow(x_0, prepare, make_step, compare, dt_amplification=1.1, dt_damping=10.0):
+    """sample the dt_i to obtain a smooth  { x(t_i) }_i
+
+    Parameters
+    ----------
+    x_0 : Any
+        initial state
+
+    prepare : function
+        function that takes ``(current_state, current_time, previous_data, previous_time)`` and returns ``current_data``
+
+    make_step : function
+        function that takes ``(current_state, current_data, current_time, dt)`` and returns ``next_state``
+
+    compare : function
+        function that takes ``(previous_data, current_data)`` and returns a float or a list of floats
     """
     dt = 1
     last_dt = 0
@@ -15,7 +28,8 @@ def flow(x, prepare, make_step, compare, dt_amplification=1.1, dt_damping=10.0):
     t = 0
     d = None
 
-    data = prepare(x, t, None, 0)
+    data = prepare(x_0, t, None, 0)
+    x = x_0
 
     for step in itertools.count():
 

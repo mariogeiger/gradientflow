@@ -5,7 +5,7 @@ Gradient flow for any model using pytorch backprop
 import math
 from collections import namedtuple
 
-from .flow import flow
+from ._flow import flow
 
 
 def gradientflow_kernel(kernel, y, loss_prim, f0=None, tau=0, max_dgrad=1e-3, max_dout=1):
