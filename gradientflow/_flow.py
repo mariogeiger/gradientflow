@@ -5,7 +5,7 @@ ODE flow
 import itertools
 
 
-def flow(x_0, prepare, make_step, compare, dt_amplification=1.1, dt_damping=10.0):
+def flow(x_0, prepare, make_step, compare, dt_amplification=1.1, dt_damping=10.0, checkpoints=None):
     """sample the dt_i to obtain a smooth  { x(t_i) }_i
 
     Parameters
@@ -27,6 +27,13 @@ def flow(x_0, prepare, make_step, compare, dt_amplification=1.1, dt_damping=10.0
     step_change_dt = 0
     t = 0
     d = None
+    next_t = 0
+    if checkpoints is not None:
+        checkpoints = iter(checkpoints)
+        try:
+            next_t = next(checkpoints)
+        except StopIteration:
+            return
 
     data = prepare(x_0, t, None, 0)
     x = x_0
@@ -45,13 +52,25 @@ def flow(x_0, prepare, make_step, compare, dt_amplification=1.1, dt_damping=10.0
             'changed_dt': step_change_dt == step - 1,
         }
 
-        yield state, internals
+        if t >= next_t:
+            yield state, internals
+
+            if checkpoints is not None:
+                try:
+                    next_t = next(checkpoints)
+                except StopIteration:
+                    return
 
         while True:
             # 2 - Make a tentative step
-            new_x = make_step(x, data, t, dt)
-            new_t = t + dt
-            last_dt = dt
+            if t + dt < next_t:
+                new_x = make_step(x, data, t, dt)
+                new_t = t + dt
+                last_dt = dt
+            else:
+                new_t = next_t
+                last_dt = next_t - t
+                new_x = make_step(x, data, t, last_dt)
 
             # 3 - Check if the step is small enough
             new_data = prepare(new_x, new_t, data, t)

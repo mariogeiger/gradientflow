@@ -119,7 +119,7 @@ def _output_gradient(f, loss, x, y, out0, chunk):
     return torch.cat(out), grad, loss_value
 
 
-def gradientflow_backprop(f0, x, y, loss, subf0=False, tau=0, chunk=None, batch=None, max_dgrad=1e-3, max_dout=1):
+def gradientflow_backprop(f0, x, y, loss, subf0=False, tau=0, chunk=None, batch=None, max_dgrad=1e-3, max_dout=1, checkpoints=None):
     """
     gradientflow on a torch.nn.Model using backprop
     :param f0: torch.nn.Model
@@ -196,7 +196,7 @@ def gradientflow_backprop(f0, x, y, loss, subf0=False, tau=0, chunk=None, batch=
 
     opt = _ContinuousMomentum(f.parameters(), dt=0, tau=tau)
 
-    for state, internals in flow((f.state_dict(), opt.state_dict()), prepare, make_step, compare):
+    for state, internals in flow((f.state_dict(), opt.state_dict()), prepare, make_step, compare, checkpoints=checkpoints):
         out, grad, loss_value, bi = internals['data']
         f.load_state_dict(internals['x'][0])
 

@@ -22,15 +22,23 @@ def loss(pred, true):
     return (pred.flatten() - true).pow(2)
 
 
+def checkpoints():
+    t = 0.1
+    while True:
+        yield t
+        t *= 1.1
+
+
 dynamics = []
 
-for state, internals in gradientflow_backprop(f, x, y, loss):
+for state, internals in gradientflow_backprop(f, x, y, loss, checkpoints=checkpoints()):
     dynamics.append(state)
 
-    if state['loss'] < 1e-6:
+    if state['loss'] < 1e-5:
         f1 = internals['f']  # trained model
         break
 
 plt.plot([x['t'] for x in dynamics], [x['loss'] for x in dynamics])
+plt.xscale('log')
 plt.yscale('log')
 plt.show()
