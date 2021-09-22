@@ -63,7 +63,7 @@ def flow(x_0, prepare, make_step, compare, dt_amplification=1.1, dt_damping=10.0
 
         while True:
             # 2 - Make a tentative step
-            if t + dt < next_t:
+            if (checkpoints is None) or (t + dt < next_t):
                 new_x = make_step(x, data, t, dt)
                 new_t = t + dt
                 last_dt = dt
